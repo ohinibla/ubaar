@@ -1,0 +1,6 @@
+<form action="{% url 'users:check_user_phonenumber' %}" method="post">
+  {% csrf_token %}
+  <h3>Enter phonenumber</h3>
+  {{form.as_p}}
+  <input type="submit" value="login">
+</form>
