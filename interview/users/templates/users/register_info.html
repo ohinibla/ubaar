@@ -1,0 +1,9 @@
+<h1>register info form</h1>
+<h3>user matched otp</h3>
+
+<form method='post'>
+  {% csrf_token %}
+  {{form.as_p}}
+  <input type="submit" value="Next">
+</form>
+{{errors}}

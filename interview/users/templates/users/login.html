@@ -1,2 +1,9 @@
-{{form.as_p}}
-<h3>user doesn't exists</h3>
+<h1>login form</h1>
+<h3>user exists</h3>
+
+<form action="{% url 'users:login_user' %}" method='post'>
+  {% csrf_token %}
+  {{form.as_p}}
+  <input type="submit" value="login">
+</form>
+{{errors}}

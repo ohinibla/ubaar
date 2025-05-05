@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Django",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/interview/manage.py",
+      "django": true,
+      "justMyCode": false,
+      "args": ["runserver", "--noreload"],
+      "autoReload": {
+        "enable": false
+      }
+    }
+  ]
+}
