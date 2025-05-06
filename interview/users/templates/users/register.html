@@ -1,16 +1,14 @@
-<h1>register form</h1>
-<h3>user doesn't exist</h3>
-
-<form method='post'>
-  {% csrf_token %}
-  <label for="{{form.otp.id_for_label}}">{{form.otp.label}}: </label>
-  {{form.otp}}
-  {{form.otp_cache_key.as_hidden}}
-  <input type="submit" value="register">
-</form>
-<p>{{errors}}</p>
-<p>{{otp_error}}</p>
-<p>{{ban_error}}</p>
-
-
-
+{% extends 'users/base.html' %}
+{% block debug %}<h1>register form</h1>{% endblock %}
+{% block content %}
+    <form method='post'>
+        {% csrf_token %}
+        <label for="{{ form.otp.id_for_label }}">{{ form.otp.label }}:</label>
+        {{ form.otp }}
+        {{ form.otp_cache_key.as_hidden }}
+        <input type="submit" value="register">
+    </form>
+    <p>{{ errors }}</p>
+    <p>{{ otp_error }}</p>
+    <p>{{ ban_error }}</p>
+{% endblock %}

@@ -1,10 +1,8 @@
-<p>current logged in user: {{request.user}}</p>
-{% if request.user.is_authenticated %}
-<form action="{% url 'users:logout_user' %}" method="post">
-  {% csrf_token %}
-  <input type="submit" value="logout">
-</form>
-{% endif %}
+{% extends 'users/base.html' %}
+{% block debug %}
+<h1>Phonenumber Form</h1>
+{% endblock %}
+{% block content %}
 <form action="{% url 'users:check' %}" method="post">
   {% csrf_token %}
   <h3>Enter phonenumber</h3>
@@ -12,3 +10,4 @@
   <input type="submit" value="login">
 </form>
 {{errors}}
+{% endblock %}

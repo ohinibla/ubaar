@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Interview Assignment</title>
+        <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+      }
+      .site-header {
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-bottom: 1px solid #e0e0e0;
+      }
+      .site-navigation {
+        margin-top: 10px;
+      }
+      .nav {
+        list-style-type: none;
+        padding: 0;
+        display: flex;
+        gap: 15px;
+      }
+        </style>
+    </head>
+    <body>
+        <header class="site-header">
+            <nav class="site-navigation">
+                <ul class="nav"
+                    style="display: flex;
+                           justify-content: space-between;
+                           align-items: center">
+                    {% block debug %}{% endblock %}
+                    <div>
+                        <p style="margin: 0;">current logged in user: {{ request.user }}</p>
+                        {% if request.user.is_authenticated %}
+                            <form action="{% url 'users:logout_user' %}" method="post">
+                                {% csrf_token %}
+                                <input type="submit" value="logout">
+                            </form>
+                        {% endif %}
+                    </div>
+                </ul>
+            </nav>
+        </header>
+        <main style="text-align: center;">
+            {% block content %}{% endblock %}
+        </main>
+    </body>
+</html>
