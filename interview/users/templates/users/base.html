@@ -29,21 +29,25 @@
     <body>
         <header class="site-header">
             <nav class="site-navigation">
-                <ul class="nav"
-                    style="display: flex;
-                           justify-content: space-between;
-                           align-items: center">
+                <div class="nav"
+                     style="display: flex;
+                            justify-content: space-between;
+                            align-items: center">
                     {% block debug %}{% endblock %}
                     <div>
-                        <p style="margin: 0;">current logged in user: {{ request.user }}</p>
+                        <p style="margin-bottom: 10px;">current logged in user: {{ request.user }}</p>
+                        <p>ip: {{ request.META.REMOTE_ADDR }}</p>
                         {% if request.user.is_authenticated %}
                             <form action="{% url 'users:logout_user' %}" method="post">
                                 {% csrf_token %}
                                 <input type="submit" value="logout">
                             </form>
                         {% endif %}
+                        <button>
+                            <a href="{% url 'users:check' %}">Home</a>
+                        </button>
                     </div>
-                </ul>
+                </div>
             </nav>
         </header>
         <main style="text-align: center;">

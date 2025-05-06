@@ -1,13 +1,11 @@
 {% extends 'users/base.html' %}
-{% block debug %}
-<h1>Phonenumber Form</h1>
-{% endblock %}
+{% block debug %}<h1>Phonenumber Form</h1>{% endblock %}
 {% block content %}
-<form action="{% url 'users:check' %}" method="post">
-  {% csrf_token %}
-  <h3>Enter phonenumber</h3>
-  {{form.as_p}}
-  <input type="submit" value="login">
-</form>
-{{errors}}
+    <form action="{% url 'users:check' %}" method="post">
+        {% csrf_token %}
+        <h3>Enter phonenumber</h3>
+        {{ form.as_p }}
+        <input type="submit" value="login">
+    </form>
+    {% for err in ban_error %}<p>{{ err }}</p>{% endfor %}
 {% endblock %}
