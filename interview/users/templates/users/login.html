@@ -1,5 +1,4 @@
 <h1>login form</h1>
-<h3>user exists</h3>
 
 <form action="{% url 'users:login_user' %}" method='post'>
   {% csrf_token %}
@@ -7,3 +6,4 @@
   <input type="submit" value="login">
 </form>
 {{errors}}
+{% if ban_error %}{{ban_error}}{% endif %}

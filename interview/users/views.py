@@ -1,7 +1,7 @@
-from random import randint
+from datetime import datetime, timedelta
 from secrets import token_urlsafe
 
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.forms import get_user_model
 from django.core.cache import cache
 from django.db.models import ObjectDoesNotExist
@@ -15,6 +15,45 @@ from .otp import OTP
 # Create your views here.
 
 auth_user = get_user_model()
+MAX_ATTEMPS = 3
+BAN_PERIOD_MINUTE = 60
+
+
+def get_ban_remaining_time(username):
+    default_user_stat = {"attempts": 0, "ban_start_time": None}
+    return cache.get(username, default_user_stat).get("ban_start_time")
+
+
+def ban_user_if_necessary(username):
+    """
+    Check user attempts and ban it neccessory
+    return if user is banned
+    """
+    default_user_stat = {"attempts": 0, "ban_start_time": None}
+    user_current_stat = cache.get(username, default_user_stat)
+    user_attemps = user_current_stat["attempts"]
+    user_ban_start_time = user_current_stat["ban_start_time"]
+    # the first time user is axceeding the limit, initiate a ban start time.
+    if user_attemps == MAX_ATTEMPS:
+        user_ban_start_time = datetime.now()
+    user_new_stat = {
+        "attempts": user_attemps + 1,
+        "ban_start_time": user_ban_start_time,
+    }
+    # calculate the remaining time, if ban_start_time is None, then the remaining time is 0 minutes
+    remaining_time_minutes = (
+        BAN_PERIOD_MINUTE - (datetime.now() - user_ban_start_time).seconds / 60
+        if user_ban_start_time
+        else 0
+    )
+    # set cache expiry to be 60 minutes
+    cache.set(
+        username,
+        user_new_stat,
+        timeout=BAN_PERIOD_MINUTE * 60 - remaining_time_minutes,
+    )
+
+    return bool(remaining_time_minutes), remaining_time_minutes
 
 
 def check_user_phonenumber(request):
@@ -28,6 +67,8 @@ def check_user_phonenumber(request):
             # check if the user exists
             try:
                 user = auth_user.objects.get(username=phonenumber)
+                # set username in session
+                request.session["username"] = phonenumber
                 # if exists, redirect a view that handles login
                 # get user's password
                 return render(
@@ -50,42 +91,83 @@ def check_user_phonenumber(request):
                 "errors": form.errors,
             },
         )
-    else:
-        # first of all, show the phonenumber form to get the user's phonenumber
-        return render(request, "users/phonenumber.html", {"form": PhonenumberForm})
+    # first of all, show the phonenumber form to get the user's phonenumber
+    return render(request, "users/phonenumber.html", {"form": PhonenumberForm})
+
+
+def logout_user(request):
+    """
+    Logout user
+    """
+    if request.method == "POST":
+        logout(request)
+        return HttpResponseRedirect(reverse("users:check"))
+    return HttpResponseRedirect(reverse("users:check"))
 
 
 def login_user(request):
     """
     Handle login
     """
+    username = request.session.get("phonenumber")
+    ban_remaining_time = get_ban_remaining_time(username)
+    is_user_banned = bool(ban_remaining_time)
     if request.method == "POST":
-        print(request.POST)
-        # user is posting to this view
-        form = LoginForm(data=request.POST)
-        # first validate the form
-        if form.is_valid():
-            # then authenticate the user
-            user = authenticate(
-                username=form.cleaned_data.get("username"),
-                password=form.cleaned_data.get("password"),
-            )
-            if user:
-                # if authenticated, login
-                login(request, form.get_user())
-                return render(request, "users/success.html")
-            else:
-                # if not authenticated, return to login
-                return render(
-                    request, "users/login.html", {"form": form, "errors": form.errors}
+        # first check whether the user is banned or not
+        username = request.POST.get("username")
+        if not is_user_banned:
+            # user is posting to this view
+            form = LoginForm(data=request.POST)
+            if form.is_valid():
+                # then authenticate the user
+                user = authenticate(
+                    username=form.cleaned_data.get("username"),
+                    password=form.cleaned_data.get("password"),
                 )
+                if user:
+                    # if authenticated, login
+                    login(request, form.get_user())
+                    # clear the cache used in login attempts
+                    cache.delete(username)
+                    return render(request, "users/success.html")
+                else:
+                    return render(
+                        request,
+                        "users/login.html",
+                        {"form": form, "errors": "user not logged in"},
+                    )
+            else:
+                ctx = {"form": form, "errors": form.errors}
+                is_user_banned, ban_remaining_time = ban_user_if_necessary(
+                    form.data.get("username")
+                )
+                if is_user_banned:
+                    ctx["ban_error"] = f"user is banned for {ban_remaining_time}"
+
+                return render(request, "users/login.html", ctx)
         else:
-            # if data is not right, return to login with errors
+            # if user is already banned
             return render(
-                request, "users/login.html", {"form": form, "errors": form.errors}
+                request,
+                "users/login.html",
+                {
+                    "form": LoginForm,
+                    "ban_error": f"user is banned for {ban_remaining_time} minutes",
+                },
             )
     # if user redirected to this view from check_user_phonenumber view since the user exists
-    return render(request, "users/login.html", {"form": LoginForm})
+    # check whether the user is banned or not
+    if is_user_banned:
+        return render(
+            request,
+            "users/login.html",
+            {
+                "form": LoginForm,
+                "ban_error": f"user is banned for {ban_remaining_time}",
+            },
+        )
+    else:
+        return render(request, "users/login.html", {"form": LoginForm})
 
 
 def register_otp(request, phonenumber):
@@ -198,7 +280,6 @@ def register_password(request):
         form = RegisterForm(user_data)
         if form.is_valid():
             # if data is valid, create a user object
-            # user, created = auth_user.objects.create(form)
             user = form.save()
             login(request, user)
             return render(request, "users/success.html")
@@ -209,7 +290,3 @@ def register_password(request):
             "users/register_info.html",
             {"form": RegisterInfoForm, "errors": form.errors},
         )
-
-
-# NOTE: can i authenticate without user and pass, i mean a temporary authentication with otp
-# FIX: check urls

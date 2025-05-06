@@ -7,7 +7,7 @@
       "request": "launch",
       "program": "${workspaceFolder}/interview/manage.py",
       "django": true,
-      "justMyCode": false,
+      "justMyCode": true,
       "args": ["runserver", "--noreload"],
       "autoReload": {
         "enable": false
