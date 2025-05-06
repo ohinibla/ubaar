@@ -123,9 +123,10 @@ def login_user(request):
                 )
         else:
             ctx = {"form": form}
-            is_user_banned = ban_user_if_necessary(username) or ban_user_if_necessary(
-                user_ip_address
-            )
+            # check conditions separately
+            is_user_banned_by_username = ban_user_if_necessary(username)
+            is_user_banned_by_ip = ban_user_if_necessary(user_ip_address)
+            is_user_banned = is_user_banned_by_username or is_user_banned_by_ip
             ban_remaining_time = max(
                 get_ban_remaining_time(username),
                 get_ban_remaining_time(user_ip_address),
@@ -211,9 +212,10 @@ def register_otp(request, phonenumber):
                     "form": OTPForm(initial={"otp_cache_key": otp_cache_key}),
                     "otp_error": "otp doesn't match",
                 }
-                is_user_banned = ban_user_if_necessary(
-                    phonenumber
-                ) or ban_user_if_necessary(user_ip_address)
+                # check ban conditions (separably)
+                is_user_banned_by_username = ban_user_if_necessary(phonenumber)
+                is_user_banned_by_ip = ban_user_if_necessary(user_ip_address)
+                is_user_banned = is_user_banned_by_username or is_user_banned_by_ip
                 ban_remaining_time = max(
                     get_ban_remaining_time(phonenumber),
                     get_ban_remaining_time(user_ip_address),
