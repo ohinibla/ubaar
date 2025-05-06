@@ -57,7 +57,7 @@ def check_phonenumber(request):
     ctx = {"form": PhonenumberForm, "ban_error": []}
     if check_is_user_banned(request.session.get("username")):
         ctx["ban_error"].append("user already banned")
-    elif check_is_user_banned(request.META.get("REMOTE_ADDR")):
+    if check_is_user_banned(request.META.get("REMOTE_ADDR")):
         ctx["ban_error"].append("ip already banned")
     return render(request, "users/phonenumber.html", ctx)
 
@@ -97,7 +97,7 @@ def login_user(request):
                     "ban_error": f"user is banned for {ban_remaining_time} minutes",
                 },
             )
-        # user is posting to this view
+        # user is posting to this view and not banned
         form = LoginForm(data=request.POST)
         if form.is_valid():
             # then authenticate the user
