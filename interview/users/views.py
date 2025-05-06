@@ -11,7 +11,8 @@ from django.shortcuts import render, reverse
 from .forms import (LoginForm, OTPForm, PhonenumberForm, RegisterForm,
                     RegisterInfoForm, RegisterPasswordForm)
 from .otp import generate_random_otp
-from .utils import ban_user_if_necessary, get_ban_remaining_time
+from .utils import (ban_user_if_necessary, check_is_user_banned,
+                    get_ban_remaining_time)
 
 # Create your views here.
 
@@ -49,13 +50,16 @@ def check_phonenumber(request):
         return render(
             request,
             "users/phonenumber.html",
-            {
-                "form": PhonenumberForm(initial=form.data),
-                "errors": form.errors,
-            },
+            {"form": PhonenumberForm(initial=form.data)},
         )
     # first of all, show the phonenumber form to get the user's phonenumber
-    return render(request, "users/phonenumber.html", {"form": PhonenumberForm})
+    # check if user is banned, and show user some feedback
+    ctx = {"form": PhonenumberForm, "ban_error": []}
+    if check_is_user_banned(request.session.get("username")):
+        ctx["ban_error"].append("user already banned")
+    elif check_is_user_banned(request.META.get("REMOTE_ADDR")):
+        ctx["ban_error"].append("ip already banned")
+    return render(request, "users/phonenumber.html", ctx)
 
 
 def logout_user(request):
@@ -72,7 +76,7 @@ def login_user(request):
     """
     Handle login
     """
-    username = request.session.get("phonenumber")
+    username = request.session.get("username")
     user_ip_address = request.META["REMOTE_ADDR"]
     # set ban time remaining to be the greater of banned by ip or banned by username
     # this way, ban period is insured to be at least BAN_PERIOD_MINUTE
@@ -83,41 +87,7 @@ def login_user(request):
     if request.method == "POST":
         # first check whether the user is banned or not
         username = request.POST.get("username")
-        if not is_user_banned:
-            # user is posting to this view
-            form = LoginForm(data=request.POST)
-            if form.is_valid():
-                # then authenticate the user
-                user = authenticate(
-                    username=form.cleaned_data.get("username"),
-                    password=form.cleaned_data.get("password"),
-                )
-                if user:
-                    # if authenticated, login
-                    login(request, form.get_user())
-                    # clear the cache used in login attempts
-                    cache.delete(username)
-                    return render(request, "users/success.html")
-                else:
-                    return render(
-                        request,
-                        "users/login.html",
-                        {"form": form, "errors": "user not logged in"},
-                    )
-            else:
-                ctx = {"form": form, "errors": form.errors}
-                is_user_banned = ban_user_if_necessary(
-                    username
-                ) and ban_user_if_necessary(user_ip_address)
-                ban_remaining_time = max(
-                    get_ban_remaining_time(username),
-                    get_ban_remaining_time(user_ip_address),
-                )
-                if is_user_banned:
-                    ctx["ban_error"] = f"user is banned for {ban_remaining_time}"
-
-                return render(request, "users/login.html", ctx)
-        else:
+        if is_user_banned:
             # if user is already banned
             return render(
                 request,
@@ -127,6 +97,43 @@ def login_user(request):
                     "ban_error": f"user is banned for {ban_remaining_time} minutes",
                 },
             )
+        # user is posting to this view
+        form = LoginForm(data=request.POST)
+        if form.is_valid():
+            # then authenticate the user
+            user = authenticate(
+                username=form.cleaned_data.get("username"),
+                password=form.cleaned_data.get("password"),
+            )
+            if user:
+                # if authenticated, login
+                login(request, form.get_user())
+                # clear the cache used in login attempts
+                cache.delete(username)
+                return render(request, "users/success.html")
+            else:
+                # user obj might be None due to user not registered
+                return render(
+                    request,
+                    "users/login.html",
+                    {
+                        "form": form,
+                        "user_error": "user not logged in and/or user doesn't exist",
+                    },
+                )
+        else:
+            ctx = {"form": form}
+            is_user_banned = ban_user_if_necessary(username) or ban_user_if_necessary(
+                user_ip_address
+            )
+            ban_remaining_time = max(
+                get_ban_remaining_time(username),
+                get_ban_remaining_time(user_ip_address),
+            )
+            if is_user_banned:
+                ctx["ban_error"] = f"user is banned for {ban_remaining_time}"
+
+            return render(request, "users/login.html", ctx)
     # if user redirected to this view from another view since the user exists
     # check whether the user is banned or not
     if is_user_banned:
@@ -139,7 +146,7 @@ def login_user(request):
             },
         )
 
-    # if user was not banned, on a get request, just render the form
+    # on a get request, just render the form
     return render(request, "users/login.html", {"form": LoginForm})
 
 
@@ -147,7 +154,10 @@ def register_otp(request, phonenumber):
     """
     Handle registration
     """
-    ban_remaining_time = get_ban_remaining_time(phonenumber)
+    user_ip_address = request.META["REMOTE_ADDR"]
+    ban_remaining_time = max(
+        get_ban_remaining_time(phonenumber), get_ban_remaining_time(user_ip_address)
+    )
     is_user_banned = bool(ban_remaining_time)
     # user has been redirected to get registered
     if request.method == "GET":
@@ -196,13 +206,18 @@ def register_otp(request, phonenumber):
                 return HttpResponseRedirect(reverse("users:register_info"))
             else:
                 # the same as login, but already use url arg (phonenumber) as identifier instead of session
-                ctx = {"form": form, "errors": form.errors}
+                ctx = {"form": form}
                 ctx = {
                     "form": OTPForm(initial={"otp_cache_key": otp_cache_key}),
-                    "form_errors": form.errors,
                     "otp_error": "otp doesn't match",
                 }
-                is_user_banned = ban_user_if_necessary(phonenumber)
+                is_user_banned = ban_user_if_necessary(
+                    phonenumber
+                ) or ban_user_if_necessary(user_ip_address)
+                ban_remaining_time = max(
+                    get_ban_remaining_time(phonenumber),
+                    get_ban_remaining_time(user_ip_address),
+                )
                 if is_user_banned:
                     ctx["ban_error"] = f"user is banned for {ban_remaining_time}"
 
@@ -215,8 +230,7 @@ def register_otp(request, phonenumber):
             {
                 "form": OTPForm(
                     initial={"otp_cache_key": form.cleaned_data.get("otp_cache_key")}
-                ),
-                "errors": form.errors,
+                )
             },
         )
 
@@ -284,5 +298,5 @@ def register_password(request):
         return render(
             request,
             "users/register_info.html",
-            {"form": RegisterInfoForm, "errors": form.errors},
+            {"form": RegisterInfoForm},
         )
