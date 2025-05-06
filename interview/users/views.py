@@ -10,52 +10,12 @@ from django.shortcuts import render, reverse
 
 from .forms import (LoginForm, OTPForm, PhonenumberForm, RegisterForm,
                     RegisterInfoForm, RegisterPasswordForm)
-from .otp import OTP
+from .otp import generate_random_otp
+from .utils import ban_user_if_necessary, get_ban_remaining_time
 
 # Create your views here.
 
 auth_user = get_user_model()
-MAX_ATTEMPS = 3
-BAN_PERIOD_MINUTE = 60
-
-
-def get_ban_remaining_time(identifier):
-    default_user_stat = {"attempts": 0, "ban_start_time": None}
-    return cache.get(identifier, default_user_stat).get("ban_start_time")
-
-
-def ban_user_if_necessary(identifier):
-    """
-    Check user attempts and ban it neccessory
-    check cache with `identifier` as key for testing user stats
-    `identifier` could be username or ip
-    return if user is banned
-    """
-    default_user_stat = {"attempts": 0, "ban_start_time": None}
-    user_current_stat = cache.get(identifier, default_user_stat)
-    user_attemps = user_current_stat["attempts"]
-    user_ban_start_time = user_current_stat["ban_start_time"]
-    # the first time user is axceeding the limit, initiate a ban start time.
-    if user_attemps == MAX_ATTEMPS:
-        user_ban_start_time = datetime.now()
-    user_new_stat = {
-        "attempts": user_attemps + 1,
-        "ban_start_time": user_ban_start_time,
-    }
-    # calculate the remaining time, if ban_start_time is None, then the remaining time is 0 minutes
-    remaining_time_minutes = (
-        BAN_PERIOD_MINUTE - (datetime.now() - user_ban_start_time).seconds / 60
-        if user_ban_start_time
-        else 0
-    )
-    # set cache expiry to be 60 minutes
-    cache.set(
-        identifier,
-        user_new_stat,
-        timeout=BAN_PERIOD_MINUTE * 60 - remaining_time_minutes,
-    )
-
-    return bool(remaining_time_minutes), remaining_time_minutes
 
 
 def check_phonenumber(request):
@@ -113,7 +73,12 @@ def login_user(request):
     Handle login
     """
     username = request.session.get("phonenumber")
-    ban_remaining_time = get_ban_remaining_time(username)
+    user_ip_address = request.META["REMOTE_ADDR"]
+    # set ban time remaining to be the greater of banned by ip or banned by username
+    # this way, ban period is insured to be at least BAN_PERIOD_MINUTE
+    ban_remaining_time = max(
+        get_ban_remaining_time(username), get_ban_remaining_time(user_ip_address)
+    )
     is_user_banned = bool(ban_remaining_time)
     if request.method == "POST":
         # first check whether the user is banned or not
@@ -141,8 +106,12 @@ def login_user(request):
                     )
             else:
                 ctx = {"form": form, "errors": form.errors}
-                is_user_banned, ban_remaining_time = ban_user_if_necessary(
-                    form.data.get("username")
+                is_user_banned = ban_user_if_necessary(
+                    username
+                ) and ban_user_if_necessary(user_ip_address)
+                ban_remaining_time = max(
+                    get_ban_remaining_time(username),
+                    get_ban_remaining_time(user_ip_address),
                 )
                 if is_user_banned:
                     ctx["ban_error"] = f"user is banned for {ban_remaining_time}"
@@ -189,7 +158,7 @@ def register_otp(request, phonenumber):
             return HttpResponseRedirect(reverse("users:check"))
         # initiate an otp process
         # create a random 6 digit string
-        random_otp = OTP.generate_random_otp()
+        random_otp = generate_random_otp()
         print(f"🔴🟢   {random_otp = }")
         # store the otp in cache
         # generate a url_safe token as cache key, reason being it can be sent back as post and cannot be guessed
@@ -233,7 +202,7 @@ def register_otp(request, phonenumber):
                     "form_errors": form.errors,
                     "otp_error": "otp doesn't match",
                 }
-                is_user_banned, ban_remaining_time = ban_user_if_necessary(phonenumber)
+                is_user_banned = ban_user_if_necessary(phonenumber)
                 if is_user_banned:
                     ctx["ban_error"] = f"user is banned for {ban_remaining_time}"
 
@@ -253,6 +222,9 @@ def register_otp(request, phonenumber):
 
 
 def register_info(request):
+    """
+    Register user info, first name, last name and email
+    """
     if request.method == "POST":
         form = RegisterInfoForm(request.POST)
         if form.is_valid():
@@ -275,6 +247,9 @@ def register_info(request):
 
 
 def register_password(request):
+    """
+    Register user password and finally create a user object
+    """
     # get all the user data from cache
     user_data = {
         "first_name": request.session.get("first_name"),
