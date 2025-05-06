@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from secrets import token_urlsafe
 
 from django.contrib.auth import authenticate, login, logout
@@ -19,18 +19,20 @@ MAX_ATTEMPS = 3
 BAN_PERIOD_MINUTE = 60
 
 
-def get_ban_remaining_time(username):
+def get_ban_remaining_time(identifier):
     default_user_stat = {"attempts": 0, "ban_start_time": None}
-    return cache.get(username, default_user_stat).get("ban_start_time")
+    return cache.get(identifier, default_user_stat).get("ban_start_time")
 
 
-def ban_user_if_necessary(username):
+def ban_user_if_necessary(identifier):
     """
     Check user attempts and ban it neccessory
+    check cache with `identifier` as key for testing user stats
+    `identifier` could be username or ip
     return if user is banned
     """
     default_user_stat = {"attempts": 0, "ban_start_time": None}
-    user_current_stat = cache.get(username, default_user_stat)
+    user_current_stat = cache.get(identifier, default_user_stat)
     user_attemps = user_current_stat["attempts"]
     user_ban_start_time = user_current_stat["ban_start_time"]
     # the first time user is axceeding the limit, initiate a ban start time.
@@ -48,7 +50,7 @@ def ban_user_if_necessary(username):
     )
     # set cache expiry to be 60 minutes
     cache.set(
-        username,
+        identifier,
         user_new_stat,
         timeout=BAN_PERIOD_MINUTE * 60 - remaining_time_minutes,
     )
@@ -56,10 +58,11 @@ def ban_user_if_necessary(username):
     return bool(remaining_time_minutes), remaining_time_minutes
 
 
-def check_user_phonenumber(request):
+def check_phonenumber(request):
     """
     Handle logging in with phonenumber
     """
+    # check if the user is already banned or not
     if request.method == "POST":
         form = PhonenumberForm(request.POST)
         if form.is_valid():
@@ -76,8 +79,8 @@ def check_user_phonenumber(request):
                     "users/login.html",
                     {"form": LoginForm(initial={"username": phonenumber})},
                 )
+            # if user obj doesn't exist
             except ObjectDoesNotExist:
-                # if doesn't exist
                 # redirect to a register view with the phonenumber and the corresponding cache key
                 return HttpResponseRedirect(
                     reverse("users:register", args=[phonenumber])
@@ -155,7 +158,7 @@ def login_user(request):
                     "ban_error": f"user is banned for {ban_remaining_time} minutes",
                 },
             )
-    # if user redirected to this view from check_user_phonenumber view since the user exists
+    # if user redirected to this view from another view since the user exists
     # check whether the user is banned or not
     if is_user_banned:
         return render(
@@ -166,16 +169,24 @@ def login_user(request):
                 "ban_error": f"user is banned for {ban_remaining_time}",
             },
         )
-    else:
-        return render(request, "users/login.html", {"form": LoginForm})
+
+    # if user was not banned, on a get request, just render the form
+    return render(request, "users/login.html", {"form": LoginForm})
 
 
 def register_otp(request, phonenumber):
     """
     Handle registration
     """
+    ban_remaining_time = get_ban_remaining_time(phonenumber)
+    is_user_banned = bool(ban_remaining_time)
     # user has been redirected to get registered
     if request.method == "GET":
+        # first check whether the user is banned
+        # if banned don't proceed and return with an error
+        if is_user_banned:
+            # redirect to the check_user_phonenumber view
+            return HttpResponseRedirect(reverse("users:check"))
         # initiate an otp process
         # create a random 6 digit string
         random_otp = OTP.generate_random_otp()
@@ -191,6 +202,10 @@ def register_otp(request, phonenumber):
             {"form": OTPForm(initial={"otp_cache_key": otp_cache_key})},
         )
     if request.method == "POST":
+        # check whether the user is already banned or not (same as GET)
+        # but redirect to check_user_phonenumber view instead
+        if is_user_banned:
+            return HttpResponseRedirect(reverse("users:check"))
         # user is registering with opt value and an implicit otp_cache_key
         # populate the otp form
         form = OTPForm(request.POST)
@@ -204,21 +219,27 @@ def register_otp(request, phonenumber):
             server_otp_value = cache.get(otp_cache_key)
             if user_otp_value == server_otp_value:
                 # proceed with registration process
+                # clear the cache used in otp attempts
+                cache.delete(phonenumber)
                 # pass phonenumber as session, so that the user can be created with all
                 # the gathered info in subsequent views at the last step
                 request.session["username"] = phonenumber
                 return HttpResponseRedirect(reverse("users:register_info"))
             else:
-                return render(
-                    request,
-                    "users/register.html",
-                    {
-                        "form": OTPForm(initial={"otp_cache_key": otp_cache_key}),
-                        "errors": "otp doesn't match",
-                    },
-                )
+                # the same as login, but already use url arg (phonenumber) as identifier instead of session
+                ctx = {"form": form, "errors": form.errors}
+                ctx = {
+                    "form": OTPForm(initial={"otp_cache_key": otp_cache_key}),
+                    "form_errors": form.errors,
+                    "otp_error": "otp doesn't match",
+                }
+                is_user_banned, ban_remaining_time = ban_user_if_necessary(phonenumber)
+                if is_user_banned:
+                    ctx["ban_error"] = f"user is banned for {ban_remaining_time}"
 
-        # if form validation doesn't pass
+                return render(request, "users/register.html", ctx)
+
+        # if otp form validation doesn't pass
         return render(
             request,
             "users/register.html",
