@@ -50,13 +50,13 @@ def check_phonenumber(request):
         return render(
             request,
             "users/phonenumber.html",
-            {"form": PhonenumberForm(initial=form.data)},
+            {"form": form},
         )
     # first of all, show the phonenumber form to get the user's phonenumber
     # check if user is banned, and show user some feedback
     ctx = {"form": PhonenumberForm, "ban_error": []}
     if check_is_user_banned(request.session.get("username")):
-        ctx["ban_error"].append("user already banned")
+        ctx["ban_error"].append("user (phonenumber) already banned")
     if check_is_user_banned(request.META.get("REMOTE_ADDR")):
         ctx["ban_error"].append("ip already banned")
     return render(request, "users/phonenumber.html", ctx)
@@ -132,12 +132,13 @@ def login_user(request):
                 get_ban_remaining_time(user_ip_address),
             )
             if is_user_banned:
-                ctx["ban_error"] = f"user is banned for {ban_remaining_time}"
+                return HttpResponseRedirect(reverse("users:check"))
 
             return render(request, "users/login.html", ctx)
     # if user redirected to this view from another view since the user exists
     # check whether the user is banned or not
     if is_user_banned:
+        return HttpResponseRedirect(reverse("users:check"))
         return render(
             request,
             "users/login.html",
@@ -206,10 +207,11 @@ def register_otp(request, phonenumber):
                 request.session["username"] = phonenumber
                 return HttpResponseRedirect(reverse("users:register_info"))
             else:
-                # the same as login, but already use url arg (phonenumber) as identifier instead of session
+                # the same as login, but already use url arg (phonenumber) as identifier instead
+                # getting value off of session
                 ctx = {"form": form}
                 ctx = {
-                    "form": OTPForm(initial={"otp_cache_key": otp_cache_key}),
+                    "form": form,
                     "otp_error": "otp doesn't match",
                 }
                 # check ban conditions (separably)
@@ -221,7 +223,7 @@ def register_otp(request, phonenumber):
                     get_ban_remaining_time(user_ip_address),
                 )
                 if is_user_banned:
-                    ctx["ban_error"] = f"user is banned for {ban_remaining_time}"
+                    return HttpResponseRedirect(reverse("users:check"))
 
                 return render(request, "users/register.html", ctx)
 
@@ -229,11 +231,7 @@ def register_otp(request, phonenumber):
         return render(
             request,
             "users/register.html",
-            {
-                "form": OTPForm(
-                    initial={"otp_cache_key": form.cleaned_data.get("otp_cache_key")}
-                )
-            },
+            {"form": form},
         )
 
 
