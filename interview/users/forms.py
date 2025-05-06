@@ -23,7 +23,7 @@ class PhonenumberForm(Form):
 class RegisterForm(UserCreationForm):
     username = phonenumber_field
 
-    class Meta:
+    class Meta:  # type: ignore
         model = user
         fields = (
             "username",
@@ -44,7 +44,6 @@ class LoginForm(AuthenticationForm):
 
 
 class OTPForm(Form):
-    # TODO: make a widget
     otp = CharField(
         label="otp", max_length=6, validators=[MinLengthValidator(limit_value=6)]
     )
@@ -66,6 +65,6 @@ class RegisterInfoForm(ModelForm):
 class RegisterPasswordForm(BaseUserCreationForm):
     password2 = None
 
-    class Meta:
+    class Meta:  # type: ignore
         model = user
         fields = ("password1",)
