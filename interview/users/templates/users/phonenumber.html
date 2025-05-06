@@ -7,5 +7,5 @@
         {{ form.as_p }}
         <input type="submit" value="login">
     </form>
-    {% for err in ban_error %}<p>{{ err }}</p>{% endfor %}
+    {% for err in ban_error %}<p class="errorlist">{{ err }}</p>{% endfor %}
 {% endblock %}

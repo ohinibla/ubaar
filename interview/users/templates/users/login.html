@@ -6,6 +6,6 @@
         {{ form.as_p }}
         <input type="submit" value="login">
     </form>
-    {% if ban_error %}{{ ban_error }}{% endif %}
-    {% if user_error %}{{ user_error }}{% endif %}
+    {% if ban_error %}<p class="errorlist">{{ ban_error }}</p>{% endif %}
+    {% if user_error %}<p class="errorlist">{{ user_error }}</p>{% endif %}
 {% endblock %}

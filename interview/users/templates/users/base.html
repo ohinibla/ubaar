@@ -19,38 +19,68 @@
         margin-top: 10px;
       }
       .nav {
-        list-style-type: none;
         padding: 0;
         display: flex;
-        gap: 15px;
+        justify-content: space-between;
+        align-items: center;
       }
+      .btn-list {
+        display: flex;
+        gap: 10px;
+      }
+      .logout-btn {
+        background-color: red;
+        color: black;
+        font-weight: bold;
+      }
+      main {
+        margin-top: 100px;
+        display: flex;
+        flex-direction: column;
+        margin-left: auto;
+      }
+      main * {
+        margin-left: auto;
+        margin-right: auto;
+        margin-top: 10px;
+      }
+      main input {
+        width: 100%;
+        text-align: center;
+      }
+      .errorlist {
+        width: 350px;
+        color: red;
+        font-weight: bold;
+        text-wrap: wrap;
+      }
+      
         </style>
     </head>
     <body>
         <header class="site-header">
             <nav class="site-navigation">
-                <div class="nav"
-                     style="display: flex;
-                            justify-content: space-between;
-                            align-items: center">
+                <div class="nav">
                     {% block debug %}{% endblock %}
                     <div>
                         <p style="margin-bottom: 10px;">current logged in user: {{ request.user }}</p>
                         <p>ip: {{ request.META.REMOTE_ADDR }}</p>
-                        {% if request.user.is_authenticated %}
-                            <form action="{% url 'users:logout_user' %}" method="post">
-                                {% csrf_token %}
-                                <input type="submit" value="logout">
-                            </form>
-                        {% endif %}
-                        <button>
-                            <a href="{% url 'users:check' %}">Home</a>
-                        </button>
+                        <div class="btn-list">
+                            <button>
+                                <a href="{% url 'users:check' %}">Home</a>
+                            </button>
+                            {% if request.user.is_authenticated %}
+                                <form action="{% url 'users:logout_user' %}" method="post">
+                                    {% csrf_token %}
+                                    <input class="logout-btn" type="submit" value="logout">
+                                </form>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </nav>
         </header>
-        <main style="text-align: center;">
+        <main>
             {% block content %}{% endblock %}
         </main>
     </body>
