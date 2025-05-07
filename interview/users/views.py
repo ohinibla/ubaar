@@ -1,4 +1,3 @@
-from datetime import datetime
 from secrets import token_urlsafe
 
 from django.contrib.auth import authenticate, login, logout
@@ -139,14 +138,6 @@ def login_user(request):
     # check whether the user is banned or not
     if is_user_banned:
         return HttpResponseRedirect(reverse("users:check"))
-        return render(
-            request,
-            "users/login.html",
-            {
-                "form": LoginForm,
-                "ban_error": f"user is banned for {ban_remaining_time}",
-            },
-        )
 
     # on a get request, just render the form
     return render(request, "users/login.html", {"form": LoginForm})
